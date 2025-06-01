@@ -1,0 +1,44 @@
+# Ignore build outputs
+bin/
+obj/
+
+# Ignore Visual Studio/VsCode settings and caches
+.vs/
+.vscode/
+*.suo
+*.user
+*.userprefs
+
+# Rider IDE files
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore NuGet packages folder (if any)
+*.nupkg
+packages/
+
+# Ignore generated model and label files
+trained_lbph_model.yml
+labels.json
+
+# Ignore configuration that may contain secrets (e.g., RTSP credentials)
+config.json
+
+# Ignore local data/images
+data/
+
+# Ignore Haar cascade XML (can be re-downloaded or tracked separately if desired)
+cascades/
+
+# Ignore logs
+*.log
+
+# Ignore temporary files
+*.tmp
+*~
+
+# Ignore any secrets file
+*.env
