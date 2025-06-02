@@ -29,6 +29,7 @@ config.json
 
 # Ignore local data/images
 data/
+snapshots/
 
 # Ignore Haar cascade XML (can be re-downloaded or tracked separately if desired)
 cascades/

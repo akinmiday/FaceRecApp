@@ -1,8 +1,4 @@
 ﻿// Program.cs
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using OpenCvSharp;
 using OpenCvSharp.Tracking;
 
@@ -10,7 +6,7 @@ namespace FaceRecApp
 {
     class Program
     {
-        // Simple struct to hold a CSRT tracker + label + current bounding box
+        // Holds a CSRT tracker with its label and current bounding box
         private struct TrackerData
         {
             public int Label;
@@ -85,11 +81,21 @@ namespace FaceRecApp
             var alertService = new AlertService(cfg.AlertCooldownSeconds);
             Console.WriteLine("▶️  Press ESC in the display window to quit.");
 
+            // Ensure snapshots directory exists
+            const string snapshotsDir = "snapshots";
+            if (!Directory.Exists(snapshotsDir))
+                Directory.CreateDirectory(snapshotsDir);
+
+            // Prepare log CSV if missing
+            const string logFile = snapshotsDir + "/log.csv";
+            if (!File.Exists(logFile))
+                File.WriteAllText(logFile, "Timestamp,Name,Filename\n");
+
             using var window = new Window("Face Detection & Recognition");
-            var frame     = new Mat();
-            var gray      = new Mat();
-            var trackers  = new List<TrackerData>();
-            int frameCount = 0;
+            var frame       = new Mat();
+            var gray        = new Mat();
+            var trackers    = new List<TrackerData>();
+            int frameCount  = 0;
 
             while (true)
             {
@@ -105,18 +111,17 @@ namespace FaceRecApp
                 var lostIndices = new List<int>();
                 for (int i = 0; i < trackers.Count; i++)
                 {
-                    var data = trackers[i];
-                    // Prepare a Rect to receive the updated bounding box
+                    var data       = trackers[i];
                     Rect updatedBox = new Rect();
 
-                    // Use 'ref updatedBox' overload
+                    // Use ref Rect overload
                     if (data.Tracker.Update(frame, ref updatedBox))
                     {
                         // Draw the tracked box
                         Cv2.Rectangle(frame, updatedBox, Scalar.Green, 2);
 
                         // Recognize on this updated rectangle
-                        var (name, _, lab) = recognizer.Predict(gray, updatedBox);
+                        var (name, confidence, lab) = recognizer.Predict(gray, updatedBox);
                         Cv2.PutText(
                             frame,
                             name,
@@ -127,10 +132,11 @@ namespace FaceRecApp
                             2
                         );
 
-                        // Update stored bbox so we can later check intersection
+                        // Update stored bbox
                         data.Bbox = updatedBox;
-                        trackers[i] = data; 
+                        trackers[i] = data;
 
+                        // Only alert (no snapshot) here, to avoid false captures
                         if (lab >= 0 && alertService.ShouldAlert(lab))
                             Console.WriteLine($"⚠️ Alert: {name} detected at {DateTime.Now:T}");
                     }
@@ -141,11 +147,9 @@ namespace FaceRecApp
                     }
                 }
 
-                // Remove lost trackers in reverse order
+                // Remove lost trackers
                 for (int i = lostIndices.Count - 1; i >= 0; i--)
-                {
                     trackers.RemoveAt(lostIndices[i]);
-                }
 
                 // 7. Every cfg.FrameSkip frames, run detection + recognition
                 if (frameCount % cfg.FrameSkip == 0)
@@ -160,7 +164,7 @@ namespace FaceRecApp
 
                     foreach (var rect in faces)
                     {
-                        // Check if this rect intersects any currently tracked bbox
+                        // Check if this rect intersects any tracked bbox
                         bool alreadyTracked = trackers
                             .Any(td => td.Bbox.IntersectsWith(rect));
                         if (alreadyTracked)
@@ -180,10 +184,19 @@ namespace FaceRecApp
                                 2
                             );
 
-                            // Initialize a CSRT tracker with this rect
+                            // Initialize a CSRT tracker for this face
                             var tracker = TrackerCSRT.Create();
                             tracker.Init(frame, rect);
                             trackers.Add(new TrackerData(label, tracker, rect));
+
+                            // Snapshot here—only on fresh detection
+                            SnapshotService.TakeSnapshot(
+                                frame,
+                                rect,
+                                name,
+                                snapshotsDir,
+                                logFile
+                            );
 
                             if (alertService.ShouldAlert(label))
                                 Console.WriteLine($"⚠️ Alert: {name} detected at {DateTime.Now:T}");
