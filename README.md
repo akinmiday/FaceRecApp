@@ -10,6 +10,7 @@ It supports:
   * LBPH face recognition
   * CSRT‐based tracking between detections (for efficiency)
   * Rate‐limited terminal alerts when a known face appears
+  * **Snapshot Service**: Automatically capture and save cropped images of recognized faces with overlaid names, logged to `snapshots/log.csv`.
 
 This README walks you through setup, configuration, training, and running the app.
 
@@ -50,6 +51,7 @@ FaceRecApp/
 ├─ FaceRecognizerService.cs
 ├─ CameraService.cs
 ├─ AlertService.cs
+├─ SnapshotService.cs
 └─ Program.cs
 ```
 
@@ -64,7 +66,8 @@ FaceRecApp/
 * **`FaceRecognizerService.cs`**: Loads the saved model & labels, and runs `Predict(...)` on cropped faces.
 * **`CameraService.cs`**: Wraps `VideoCapture` (webcam or RTSP URL).
 * **`AlertService.cs`**: Rate‐limits terminal alerts per recognized person.
-* **`Program.cs`**: Orchestrates “train” vs. “live” mode, manages detection, recognition, tracking, and alerts.
+* **`SnapshotService.cs`**: Captures and saves cropped images of recognized faces, overlaying the name and logging details.
+* **`Program.cs`**: Orchestrates “train” vs. “live” mode, manages detection, recognition, tracking, alerts, and invokes snapshot service.
 
 ---
 
@@ -211,16 +214,16 @@ Once the model and labels exist, start live recognition:
 # If you restarted Terminal, re‐export the fallback path:
 export DYLD_FALLBACK_LIBRARY_PATH="$PWD/bin/Debug/net*/runtimes/osx-arm64/native:$PWD/bin/Debug/net*:/usr/local/opt/opencv/lib"
 
-dotnet run
+(dotnet run)[#system]
 ```
 
 * A window titled **“Face Detection & Recognition”** opens, showing your camera feed.
 * Each frame:
 
-  1. **CSRT trackers** update existing face locations (drawn in green).
+  1. **KCF trackers** update existing face locations (drawn in green).
   2. Every *`frameSkip`* frames, run a fresh Haar detection + LBPH recognition:
 
-     * If recognized (`confidence < threshold`), draw a lime‐green box + name, start a new CSRT tracker, and print a terminal alert (once per `alertCooldownSeconds`).
+     * If recognized (`confidence < threshold`), draw a lime‐green box + name, start a new KCF tracker, and save a cropped “snapshot” with overlaid name in `snapshots/`. A log entry is also appended to `snapshots/log.csv`.
      * Otherwise draw a red “Unknown” box.
 * **Press ESC** inside the window to quit.
 
@@ -242,12 +245,15 @@ Example terminal alert:
    * Crops and resizes each detected face to 200×200.
    * Runs `LBPHFaceRecognizer.Predict(...)`.
    * If `confidence < recognitionThreshold`, returns the corresponding name; otherwise “Unknown.”
-3. **Tracking (CSRT)**
+3. **Tracking (KCF)**
 
-   * For each newly recognized face, a `TrackerCSRT` is initialized on that bounding box.
+   * For each newly recognized face, a `TrackerKCF` is initialized on that bounding box.
    * On subsequent frames, we call `tracker.Update(frame, ref rect)` instead of running full detection—much faster.
    * If a tracker fails (drifts off), we remove it and fall back to detection.
-4. **Alerting**
+4. **Snapshot Service**
+
+   * Whenever a face is recognized during fresh detection, `SnapshotService.TakeSnapshot(...)` crops the face from the frame, overlays the name, saves a PNG to `snapshots/<name>_<timestamp>.png`, and appends a log entry (`Timestamp,Name,Filename`) to `snapshots/log.csv`.
+5. **Alerting**
 
    * Whenever a face is recognized (label ≥ 0) either in detection or in tracker update, `AlertService` checks if at least `alertCooldownSeconds` have passed since the last alert for that label. If yes, a terminal alert is printed.
 
@@ -281,18 +287,28 @@ Loads and deserializes `config.json` into a strongly‐typed `AppConfig` object.
 * Rate‐limits alerts per label. Stores a dictionary `label → last alert Timestamp`.
 * `ShouldAlert(label)` returns true if more than `alertCooldownSeconds` have passed since the last alert, and updates the timestamp.
 
+### `SnapshotService.cs`
+
+* Captures and saves cropped images of recognized faces during fresh detection.
+* Overlays the recognized name onto the crop, saves a PNG under `snapshots/`, and logs an entry to `snapshots/log.csv` (format: `Timestamp,Name,Filename`).
+
 ### `Program.cs`
 
 * Parses command‐line arguments (`"train"` vs. default).
 * In **train** mode: invokes `FaceTrainer.Train()`.
 * In **live** mode:
 
-  1. Loads `FaceRecognizerService`, `CameraService`, and `AlertService`.
+  1. Loads `FaceRecognizerService`, `CameraService`, `AlertService`, and ensures `snapshots/` is ready.
   2. Loops over frames:
 
-     * Updates each `TrackerCSRT` in `trackers[]`, draws tracked boxes, and triggers alerts if needed.
-     * Every `frameSkip` frames, runs a fresh `DetectMultiScale` + `Predict(...)`.
-     * Initializes new trackers for recognized faces.
+     * Resizes each frame to 640×360, converts to grayscale, and equalizes hist.
+     * Updates each `TrackerKCF` in `trackers[]`, draws tracked boxes, and triggers alerts if needed.
+     * Every `frameSkip` frames, runs a fresh `DetectMultiScale` + `Predict(...)`. For each recognized face (label ≥ 0), it:
+
+       * Draws a lime‐green box + name.
+       * Initializes a new KCF tracker on that bounding box.
+       * Calls `SnapshotService.TakeSnapshot(...)` to save a cropped image + log.
+       * Triggers an alert if cooldown allows.
   3. Quits on **ESC**.
 
 ---
@@ -369,5 +385,5 @@ This project is released under the Apache-2.0 license. Feel free to use.
 
 **Enjoy building your own facial recognition service!**
 
-```
+```**
 ```
