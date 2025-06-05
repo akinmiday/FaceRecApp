@@ -1,0 +1,13 @@
+<!-- App.xaml -->
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fluent="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent"
+             x:Class="FaceRecApp.App">
+  <Application.Styles>
+    <!-- Fluent theme -->
+    <fluent:FluentTheme/>
+
+    <!-- Our custom Styles.axaml -->
+    <StyleInclude Source="avares://FaceRecApp/Styles.axaml"/>
+  </Application.Styles>
+</Application>

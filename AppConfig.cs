@@ -1,3 +1,4 @@
+// AppConfig.cs
 using System.Text.Json;
 
 namespace FaceRecApp

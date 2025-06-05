@@ -1,3 +1,4 @@
+// FaceTrainer.cs
 using System.Text.Json;
 using OpenCvSharp;
 using OpenCvSharp.Face;
@@ -55,12 +56,15 @@ namespace FaceRecApp
                         continue;
                     }
 
+                    // Equalize the full image
+                    Cv2.EqualizeHist(imgGray, imgGray);
+
                     var faces = _cascade.DetectMultiScale(
                         imgGray,
                         1.1,
                         5,
                         0,
-                        new Size(_cfg.MinFaceSize, _cfg.MinFaceSize)
+                        new OpenCvSharp.Size(_cfg.MinFaceSize, _cfg.MinFaceSize)
                     );
 
                     if (faces.Length == 0)
@@ -70,7 +74,10 @@ namespace FaceRecApp
                     }
 
                     var r = faces[0];
-                    using var faceROI = new Mat(imgGray, r).Resize(new Size(200, 200));
+                    using var roiRaw  = new Mat(imgGray, r);
+                    using var faceROI = roiRaw.Resize(new OpenCvSharp.Size(200, 200));
+                    Cv2.EqualizeHist(faceROI, faceROI);
+
                     faceMats.Add(faceROI.Clone());
                     labels.Add(labelIdx);
                 }

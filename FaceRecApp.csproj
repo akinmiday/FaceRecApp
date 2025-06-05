@@ -5,11 +5,27 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Let Avalonia load its native assets automatically -->
+    <AvaloniaUseWindowsSettings>true</AvaloniaUseWindowsSettings>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Core OpenCvSharp + macOS ARM64 runtime -->
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" />
+
+    <!-- Avalonia UI packages -->
+    <PackageReference Include="Avalonia" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.0" />
+
+    <!-- Fluent theme package -->
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Tell the SDK that these are Avalonia XAML files -->
+    <AvaloniaXaml Include="App.xaml" />
+    <AvaloniaXaml Include="MainWindow.xaml" />
+  </ItemGroup>
 </Project>

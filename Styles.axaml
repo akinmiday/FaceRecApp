@@ -1,0 +1,40 @@
+<!-- Styles.axaml -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Button Style -->
+  <Style Selector="Button">
+    <Setter Property="FontFamily" Value="Segoe UI"/>
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="Padding" Value="6,4"/>
+    <Setter Property="Margin" Value="0,4,0,0"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+
+  <!-- TextBox Style -->
+  <Style Selector="TextBox">
+    <Setter Property="FontFamily" Value="Segoe UI"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="BorderBrush" Value="LightGray"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="3"/>
+  </Style>
+
+  <!-- ListBox Style -->
+  <Style Selector="ListBox">
+    <Setter Property="FontFamily" Value="Segoe UI"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="BorderBrush" Value="LightGray"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
+
+  <!-- TextBlock Style (for headers and labels) -->
+  <Style Selector="TextBlock">
+    <Setter Property="FontFamily" Value="Segoe UI"/>
+    <Setter Property="Foreground" Value="Black"/>
+  </Style>
+
+</Styles>

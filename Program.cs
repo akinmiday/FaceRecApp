@@ -1,4 +1,8 @@
 ﻿// Program.cs
+using System;
+using System.IO;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using OpenCvSharp;
 using OpenCvSharp.Tracking;
 
@@ -11,9 +15,9 @@ namespace FaceRecApp
         {
             public int Label;
             public TrackerCSRT Tracker;
-            public Rect Bbox;
+            public OpenCvSharp.Rect Bbox;
 
-            public TrackerData(int label, TrackerCSRT tracker, Rect bbox)
+            public TrackerData(int label, TrackerCSRT tracker, OpenCvSharp.Rect bbox)
             {
                 Label   = label;
                 Tracker = tracker;
@@ -23,7 +27,52 @@ namespace FaceRecApp
 
         static void Main(string[] args)
         {
-            // 1. Load configuration
+            if (args.Length == 0)
+            {
+                ShowUsage();
+                return;
+            }
+
+            switch (args[0].ToLowerInvariant())
+            {
+                case "gui":
+                    BuildAvaloniaApp()
+                        .StartWithClassicDesktopLifetime(args);
+                    break;
+
+                case "train":
+                    RunTrainerConsole();
+                    break;
+
+                case "camera":
+                    RunCameraConsole();
+                    break;
+
+                default:
+                    ShowUsage();
+                    break;
+            }
+        }
+
+        private static void ShowUsage()
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  dotnet run -- gui      # Launch the Avalonia GUI");
+            Console.WriteLine("  dotnet run -- train    # Train the LBPH face recognizer in console mode");
+            Console.WriteLine("  dotnet run -- camera   # Run console‐only camera loop");
+        }
+
+        // Configure and return the Avalonia AppBuilder
+        public static AppBuilder BuildAvaloniaApp()
+            => AppBuilder.Configure<App>()
+                         .UsePlatformDetect();
+
+        // Console mode: "dotnet run -- train"
+        private static void RunTrainerConsole()
+        {
+            Console.WriteLine("🔄 Training mode selected.");
+
+            // 1) Load config.json
             AppConfig cfg;
             try
             {
@@ -35,7 +84,7 @@ namespace FaceRecApp
                 return;
             }
 
-            // 2. Load Haar cascade
+            // 2) Load Haar cascade
             if (!File.Exists(cfg.CascadeFile))
             {
                 Console.WriteLine($"❌ Cannot find cascade '{cfg.CascadeFile}'.");
@@ -43,17 +92,35 @@ namespace FaceRecApp
             }
             var faceCascade = new CascadeClassifier(cfg.CascadeFile);
 
-            // 3. Training mode?
-            if (args.Length > 0 &&
-                args[0].Equals("train", StringComparison.OrdinalIgnoreCase))
+            // 3) Run the trainer
+            var trainer = new FaceTrainer(faceCascade, cfg);
+            trainer.Train();
+        }
+
+        // Console mode: "dotnet run -- camera"
+        private static void RunCameraConsole()
+        {
+            // 1) Load config.json
+            AppConfig cfg;
+            try
             {
-                Console.WriteLine("🔄 Training mode selected.");
-                var trainer = new FaceTrainer(faceCascade, cfg);
-                trainer.Train();
+                cfg = AppConfig.Load("config.json");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Failed to load config.json: {ex.Message}");
                 return;
             }
 
-            // 4. Load recognizer & labels
+            // 2) Load Haar cascade
+            if (!File.Exists(cfg.CascadeFile))
+            {
+                Console.WriteLine($"❌ Cannot find cascade '{cfg.CascadeFile}'.");
+                return;
+            }
+            var faceCascade = new CascadeClassifier(cfg.CascadeFile);
+
+            // 3) Load recognizer & labels
             FaceRecognizerService recognizer;
             try
             {
@@ -62,19 +129,20 @@ namespace FaceRecApp
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ {ex.Message}");
-                Console.WriteLine("⚠️  Run 'dotnet run train' first.");
+                Console.WriteLine("⚠️  Run 'dotnet run -- train' first.");
                 return;
             }
 
-            // 5. Open camera (index or RTSP)
-            CameraService camera;
-            try
+            // 4) Open camera
+            VideoCapture camera;
+            if (int.TryParse(cfg.CameraSourceRaw, out var idx))
+                camera = new VideoCapture(idx);
+            else
+                camera = new VideoCapture(cfg.CameraSourceRaw);
+
+            if (!camera.IsOpened())
             {
-                camera = new CameraService(cfg.CameraSourceRaw);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ {ex.Message}");
+                Console.WriteLine($"❌ Could not open camera '{cfg.CameraSourceRaw}'.");
                 return;
             }
 
@@ -91,67 +159,59 @@ namespace FaceRecApp
             if (!File.Exists(logFile))
                 File.WriteAllText(logFile, "Timestamp,Name,Filename\n");
 
-            using var window = new Window("Face Detection & Recognition");
+            using var cvWindow = new OpenCvSharp.Window("Face Detection & Recognition");
             var frame       = new Mat();
             var gray        = new Mat();
-            var trackers    = new List<TrackerData>();
+            var trackers    = new System.Collections.Generic.List<TrackerData>();
             int frameCount  = 0;
 
             while (true)
             {
                 frameCount++;
-                frame = camera.GrabFrame();
+                camera.Read(frame);
                 if (frame.Empty())
                     break;
 
                 Cv2.CvtColor(frame, gray, ColorConversionCodes.BGR2GRAY);
                 Cv2.EqualizeHist(gray, gray);
 
-                // 6. Update existing trackers first
-                var lostIndices = new List<int>();
+                // 5) Update existing trackers first
+                var lostIndices = new System.Collections.Generic.List<int>();
                 for (int i = 0; i < trackers.Count; i++)
                 {
                     var data       = trackers[i];
-                    Rect updatedBox = new Rect();
+                    var updatedBox = new OpenCvSharp.Rect();
 
-                    // Use ref Rect overload
                     if (data.Tracker.Update(frame, ref updatedBox))
                     {
-                        // Draw the tracked box
                         Cv2.Rectangle(frame, updatedBox, Scalar.Green, 2);
-
-                        // Recognize on this updated rectangle
                         var (name, confidence, lab) = recognizer.Predict(gray, updatedBox);
                         Cv2.PutText(
                             frame,
                             name,
-                            new Point(updatedBox.X, updatedBox.Y - 10),
+                            new OpenCvSharp.Point(updatedBox.X, updatedBox.Y - 10),
                             HersheyFonts.HersheySimplex,
                             0.7,
                             Scalar.Chartreuse,
                             2
                         );
 
-                        // Update stored bbox
                         data.Bbox = updatedBox;
                         trackers[i] = data;
 
-                        // Only alert (no snapshot) here, to avoid false captures
                         if (lab >= 0 && alertService.ShouldAlert(lab))
                             Console.WriteLine($"⚠️ Alert: {name} detected at {DateTime.Now:T}");
                     }
                     else
                     {
-                        // Tracker lost its target
                         lostIndices.Add(i);
                     }
                 }
 
-                // Remove lost trackers
                 for (int i = lostIndices.Count - 1; i >= 0; i--)
                     trackers.RemoveAt(lostIndices[i]);
 
-                // 7. Every cfg.FrameSkip frames, run detection + recognition
+                // 6) Every cfg.FrameSkip frames, run detection + recognition
                 if (frameCount % cfg.FrameSkip == 0)
                 {
                     var faces = faceCascade.DetectMultiScale(
@@ -159,14 +219,12 @@ namespace FaceRecApp
                         1.1,
                         5,
                         0,
-                        new Size(cfg.MinFaceSize, cfg.MinFaceSize)
+                        new OpenCvSharp.Size(cfg.MinFaceSize, cfg.MinFaceSize)
                     );
 
                     foreach (var rect in faces)
                     {
-                        // Check if this rect intersects any tracked bbox
-                        bool alreadyTracked = trackers
-                            .Any(td => td.Bbox.IntersectsWith(rect));
+                        bool alreadyTracked = trackers.Any(td => td.Bbox.IntersectsWith(rect));
                         if (alreadyTracked)
                             continue;
 
@@ -177,19 +235,17 @@ namespace FaceRecApp
                             Cv2.PutText(
                                 frame,
                                 name,
-                                new Point(rect.X, rect.Y - 10),
+                                new OpenCvSharp.Point(rect.X, rect.Y - 10),
                                 HersheyFonts.HersheySimplex,
                                 0.7,
                                 Scalar.Chartreuse,
                                 2
                             );
 
-                            // Initialize a CSRT tracker for this face
                             var tracker = TrackerCSRT.Create();
                             tracker.Init(frame, rect);
                             trackers.Add(new TrackerData(label, tracker, rect));
 
-                            // Snapshot here—only on fresh detection
                             SnapshotService.TakeSnapshot(
                                 frame,
                                 rect,
@@ -207,7 +263,7 @@ namespace FaceRecApp
                             Cv2.PutText(
                                 frame,
                                 "Unknown",
-                                new Point(rect.X, rect.Y - 10),
+                                new OpenCvSharp.Point(rect.X, rect.Y - 10),
                                 HersheyFonts.HersheySimplex,
                                 0.7,
                                 Scalar.Red,
@@ -217,13 +273,13 @@ namespace FaceRecApp
                     }
                 }
 
-                window.ShowImage(frame);
-                if (Cv2.WaitKey(1) == 27) // ESC
+                cvWindow.ShowImage(frame);
+                if (Cv2.WaitKey(1) == 27) // ESC key
                     break;
             }
 
             Cv2.DestroyAllWindows();
-            camera.Dispose();
+            camera.Release();
         }
     }
 }
